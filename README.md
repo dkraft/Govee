@@ -6,7 +6,7 @@ The Pi manages the H5151. A sensor bound to that gateway is the gateway's sensor
 
 The Pi sends only the existing status query (`0x33`, command `0xAA`). It does not send power, color, reset, or Wi-Fi provisioning frames. A bind command is not sent until a captured notify from this gateway names a sub-device. Until then the bound set stays empty, the phone uploads every sensor it decodes, and `/health` says the gateway is not supplying readings.
 
-Version 0.2.0.
+Version 0.2.1.
 
 ## What you can read
 
@@ -24,7 +24,7 @@ A row goes stale two minutes after the last advertisement. The phone still keeps
 
 ## History server
 
-`pi/govee-history/` is installed on the Pi at `10.0.0.69` (hostname `mqtt`, Raspberry Pi 3 Model B Plus, Debian 13). The database is `/var/lib/govee-history/history.db` on the root disk (`/dev/sda2`, hundreds of gigabytes free). The HTTP process listens only on `10.0.0.69:8787`. That port was free. The MQTT broker on port 1883 is still running and is not used by this service. A bearer token in `/etc/govee-history/token` (mode 600, user `govee`) is entered once in the app under **Server**. The phone refuses any other host.
+`pi/govee-history/` is installed on the Pi at `10.0.0.69` (hostname `mqtt`, Raspberry Pi 3 Model B Plus, Debian 13). The database is `/var/lib/govee-history/history.db` on the root disk (`/dev/sda2`, hundreds of gigabytes free). The HTTP process listens only on `10.0.0.69:8787`. Open that address in a browser to see the sensors. Reads do not need a token. Uploads do. The token is in `/etc/govee-history/token` (mode 600, user `govee`) and is entered once in the app under **Server**. The phone refuses any other host. The MQTT broker on port 1883 is still running and is not used by this service.
 
 Raw samples are 10-second buckets kept 36 hours. Rollups are 15 minutes (100 days), 6 hours (400 days), and 1 day (3 years and 40 days). The 3-year chart averages those days into 3-day buckets.
 
@@ -42,12 +42,12 @@ The H5151 that was in range while this was written advertised manufacturer id `0
 
 ## Sideload
 
-The sideload build is the 0.2.0 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key.
+The sideload build is the 0.2.1 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key.
 
-https://github.com/dkraft/Govee/releases/download/v0.2.0/govee-offgrid-0.2.0.apk
+https://github.com/dkraft/Govee/releases/download/v0.2.1/govee-offgrid-0.2.1.apk
 
 ```
-adb install -r govee-offgrid-0.2.0.apk
+adb install -r govee-offgrid-0.2.1.apk
 ```
 
 On first launch the app asks for Bluetooth scan and connect, and for the history-server token. On Android 12 and older it asks for fine location instead, because that is how those versions gate BLE scans. Notifications are used for the ongoing scan and for alarms. Grant them if you want alarms while the screen is off. The app has an Internet permission so it can reach `10.0.0.69`. It does not call any other host.

@@ -183,10 +183,23 @@ class HttpTest(unittest.TestCase):
         self.history.close()
 
     def test_missing_token_is_rejected(self):
-        request = urllib.request.Request(self._url("/health"))
+        opened = urllib.request.urlopen(self._url("/health"), timeout=3)
+        self.assertEqual(opened.status, 200)
+        opened.close()
+        body = json.dumps({"readings": [reading(NOW, 21.5)]}).encode()
+        request = urllib.request.Request(self._url("/v1/readings"), data=body)
         with self.assertRaises(urllib.error.HTTPError) as raised:
             urllib.request.urlopen(request, timeout=3)
         self.assertEqual(raised.exception.code, 401)
+
+    def test_index_lists_a_sensor_without_a_token(self):
+        self.history.ingest([reading(NOW, 21.5)], "phone", now_ms=NOW)
+        request = urllib.request.Request(self._url("/"))
+        with urllib.request.urlopen(request, timeout=3) as response:
+            page = response.read().decode()
+            self.assertIn("text/html", response.headers.get("Content-Type", ""))
+        self.assertIn("Govee_H5075_ABCD", page)
+        self.assertIn("21.5", page)
 
     def test_post_and_series_round_trip(self):
         body = json.dumps({"readings": [reading(NOW, 21.5)]}).encode()

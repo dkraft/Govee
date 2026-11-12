@@ -103,7 +103,9 @@ Phone source does not overwrite an existing bucket. Gateway source replaces a ph
 
 `/health` fields used by the phone are `gateway` (`up`, `scanning`, `connecting`, `down`, `no-control-service`) and `bound`. `gateway_detail` is in the `status` table and is not in the JSON. An empty status row makes `/health` report `down`.
 
-Bearer auth uses `hmac.compare_digest`. An empty token fails closed with 401. `--rollup-only` does not read the token file.
+GET is open on the LAN, including `GET /`, which is a plain HTML list of sensors. A browser has no token, and that used to answer `{"error":"unauthorized"}` for every path. POST still requires the bearer token. `hmac.compare_digest` rejects a missing or wrong token. An empty token file fails closed for writes. `--rollup-only` does not read the token file.
+
+The phone list is the sensors it is hearing, plus every sensor in `GET /v1/latest` that it is not hearing. `fromBound` on those rows means "from the Pi", and the row says `history` rather than a signal strength. Graphs load without a token. Uploads still need one. The 3-minute and 30-minute charts read raw buckets, so they are empty when the newest sample is older than the window. The 3-day chart reads `roll_15m`.
 
 Android cleartext domain-config does not apply to an IP literal. `network_security_config.xml` allows cleartext in the base config, and `HistoryClient` is the allowlist: host `10.0.0.69`, port `8787`, and a `check` that the host string stays that value.
 

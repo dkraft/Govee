@@ -65,11 +65,6 @@ class HistoryActivity : AppCompatActivity() {
         val token = HistoryClient.token(this)
         val address = intent.getStringExtra(EXTRA_ADDRESS).orEmpty()
         val label = intent.getStringExtra(EXTRA_LABEL).orEmpty()
-        if (token.isBlank()) {
-            binding.status.text = getString(R.string.history_token)
-            binding.charts.removeAllViews()
-            return
-        }
         val ticket = ++generation
         val selected = range
         binding.status.text = getString(R.string.history_loading)

@@ -42,7 +42,7 @@ class DeviceAdapter(
             binding.name.text = device.name.ifBlank { device.address }
             val age = ReadingText.age(device.seenAt, now)
             val staleLabel = if (stale) "  stale" else ""
-            val where = if (device.fromBound) "gateway" else "${device.rssi} dBm"
+            val where = if (device.fromBound) "history" else "${device.rssi} dBm"
             binding.meta.text = "${device.address}   $where   $age$staleLabel"
             binding.values.text = device.readings.joinToString("\n\n") { ReadingText.block(it) }
             val alarmLines = device.readings.mapNotNull { reading ->

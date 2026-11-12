@@ -21,7 +21,9 @@ class HistoryApp:
         self.token = token
 
     def handle(self, method: str, path: str, body: bytes, authorization: str, now_ms: int | None = None) -> tuple[int, dict]:
-        if not self.token or not hmac.compare_digest(_bearer(authorization), self.token):
+        # Reads are open on the LAN. A browser has no token, and the phone
+        # still graphs when the token has not been typed yet. Writes stay closed.
+        if method != "GET" and not _authorized(self.token, authorization):
             return 401, {"error": "unauthorized"}
         now = int(time.time() * 1000) if now_ms is None else now_ms
         route, _, query = path.partition("?")
@@ -85,6 +87,15 @@ def serve(history: History, token: str, host: str, port: int) -> ThreadingHTTPSe
             self._reply("POST")
 
         def _reply(self, method: str) -> None:
+            route = self.path.split("?", 1)[0]
+            if method == "GET" and route == "/":
+                raw = render_index(app.history).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
             length = int(self.headers.get("Content-Length", "0") or 0)
             if length > MAX_BODY:
                 body = b""
@@ -118,6 +129,98 @@ def _rollup_loop(history: History) -> None:
             history.rollup(int(time.time() * 1000))
         except sqlite3.Error:
             continue
+
+
+def render_index(history: History, now_ms: int | None = None) -> str:
+    """The page a browser gets from http://10.0.0.69:8787/."""
+
+    now = int(time.time() * 1000) if now_ms is None else now_ms
+    health = history.health()
+    devices = sorted(history.latest(), key=lambda item: str(item.get("name") or item.get("address")))
+    rows = []
+    for device in devices:
+        temp = device.get("temp_c")
+        humidity = device.get("humidity_pct")
+        battery = device.get("battery_pct")
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(device.get('name') or device.get('address'))}</td>"
+            f"<td>{_esc(device.get('address'))}</td>"
+            f"<td>{_num(temp)}</td>"
+            f"<td>{_num(humidity)}</td>"
+            f"<td>{_num(battery, 0)}</td>"
+            f"<td>{_esc(_age(int(device.get('seen_at') or 0), now))}</td>"
+            f"<td>{_esc(device.get('source') or '')}</td>"
+            "</tr>"
+        )
+    body = "\n".join(rows) or "<tr><td colspan='7'>No readings yet.</td></tr>"
+    gateway = _esc(health.get("gateway") or "down")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Govee history</title>
+<style>
+body {{ margin: 0; padding: 24px; background: #12160F; color: #E7ECDF;
+  font: 16px/1.4 sans-serif; }}
+h1 {{ color: #D6F25C; font-size: 22px; margin: 0 0 8px; }}
+p {{ color: #8B937E; margin: 0 0 16px; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #1C2416; }}
+th {{ color: #8B937E; font-weight: normal; }}
+</style>
+</head>
+<body>
+<h1>Govee history</h1>
+<p>{_esc(VERSION)} · gateway {gateway} · {health.get("bound", 0)} bound · {len(devices)} sensors</p>
+<table>
+<thead><tr><th>Name</th><th>Address</th><th>°C</th><th>Humidity</th><th>Battery</th><th>Age</th><th>Source</th></tr></thead>
+<tbody>
+{body}
+</tbody>
+</table>
+<p>This page is a read of the Pi. Uploads from the phone still use the token.</p>
+</body>
+</html>
+"""
+
+
+def _esc(value: object) -> str:
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _num(value: object, digits: int = 1) -> str:
+    if value is None or value == "":
+        return ""
+    return f"{float(value):.{digits}f}"
+
+
+def _age(seen_at: int, now_ms: int) -> str:
+    if seen_at <= 0:
+        return ""
+    seconds = max(0, (now_ms - seen_at) // 1000)
+    if seconds < 90:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 90:
+        return f"{minutes} min"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} h"
+    return f"{hours // 24} d"
+
+
+def _authorized(token: str, header: str) -> bool:
+    if not token:
+        return False
+    return hmac.compare_digest(_bearer(header), token)
 
 
 def _bearer(header: str) -> str:

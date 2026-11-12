@@ -96,6 +96,9 @@ object LiveBoard {
             samples.groupBy { it.address }.forEach { (address, rows) ->
                 val first = rows.first()
                 val previous = devices[address]
+                // A sensor the phone is hearing stays on the live advertisement.
+                // Stored rows fill in the sensors this phone is not hearing.
+                if (previous != null && !previous.fromBound) return@forEach
                 devices[address] = Device(
                     address = address,
                     name = first.name.ifBlank { first.model.ifBlank { previous?.name.orEmpty() } },
@@ -124,7 +127,11 @@ object LiveBoard {
             scanning = scanning,
             status = status,
             history = historyNote,
-            devices = copy.sortedByDescending { it.rssi },
+            devices = copy.sortedWith(
+                compareBy<Device> { it.fromBound }
+                    .thenByDescending { it.rssi }
+                    .thenByDescending { it.seenAt },
+            ),
         )
     }
 

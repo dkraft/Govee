@@ -190,18 +190,18 @@ class ScanService : Service() {
 
     private fun syncOnce() {
         val token = HistoryClient.token(this)
-        if (token.isBlank()) {
-            LiveBoard.setHistory("history needs a token")
-            return
-        }
         try {
             val gateway = client.gatewayState(token)
             val bound = client.bound(token)
             BoundDevices.replace(bound)
-            val latest = client.latest(token).filter { it.address in bound }
+            val latest = client.latest(token)
             LiveBoard.applyBound(latest)
             LiveBoard.noteGateways("Pi gateway: $gateway")
             latest.forEach { sample -> considerAlarm(sample.address, sample.name, sample.toReading()) }
+            if (token.isBlank()) {
+                LiveBoard.setHistory("history up · set a token to upload · gateway $gateway")
+                return
+            }
             val pending = store.pending(200)
             if (pending.isNotEmpty() && client.post(token, pending)) {
                 store.markUploaded(pending.map { it.id })
