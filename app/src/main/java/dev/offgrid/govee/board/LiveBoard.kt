@@ -22,7 +22,10 @@ object LiveBoard {
         val readings: List<Reading>,
         val gatewayNote: String? = null,
         val fromBound: Boolean = false,
-    )
+        val alias: String = "",
+    ) {
+        fun shownName(): String = alias.ifBlank { name }.ifBlank { address }
+    }
 
     data class UiState(
         val scanning: Boolean,
@@ -32,6 +35,7 @@ object LiveBoard {
     )
 
     private val devices = LinkedHashMap<String, Device>()
+    private val aliases = HashMap<String, String>()
     private val listeners = CopyOnWriteArrayList<(UiState) -> Unit>()
     private val main = Handler(Looper.getMainLooper())
     private var scanning = false
@@ -50,6 +54,7 @@ object LiveBoard {
                 readings = readings,
                 gatewayNote = prev?.gatewayNote,
                 fromBound = false,
+                alias = aliases[address.uppercase()].orEmpty(),
             )
         }
         publish()
@@ -107,10 +112,38 @@ object LiveBoard {
                     readings = rows.map { it.toReading() },
                     gatewayNote = previous?.gatewayNote,
                     fromBound = true,
+                    alias = aliases[address.uppercase()].orEmpty(),
                 )
             }
         }
         publish()
+    }
+
+    fun applyAliases(names: Map<String, String>) {
+        synchronized(devices) {
+            aliases.clear()
+            names.forEach { (address, alias) ->
+                if (alias.isNotBlank()) aliases[address.uppercase()] = alias
+            }
+            devices.entries.forEach { (address, device) ->
+                devices[address] = device.copy(alias = aliases[address.uppercase()].orEmpty())
+            }
+        }
+        publish()
+    }
+
+    fun rememberAlias(address: String, alias: String) {
+        synchronized(devices) {
+            val key = address.uppercase()
+            if (alias.isBlank()) aliases.remove(key) else aliases[key] = alias
+            devices[address]?.let { devices[address] = it.copy(alias = alias) }
+        }
+        publish()
+    }
+
+    fun displayName(address: String, fallback: String): String {
+        val alias = synchronized(devices) { aliases[address.uppercase()].orEmpty() }
+        return alias.ifBlank { fallback }.ifBlank { address }
     }
 
     fun listen(listener: (UiState) -> Unit): () -> Unit {

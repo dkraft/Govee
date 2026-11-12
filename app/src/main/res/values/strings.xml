@@ -25,4 +25,7 @@
     <string name="low_hint">Low °F</string>
     <string name="save">Save</string>
     <string name="clear">Clear</string>
+    <string name="name_title">Device name</string>
+    <string name="name_hint">Name</string>
+    <string name="name_needs_token">Set the history server token first.</string>
 </resources>

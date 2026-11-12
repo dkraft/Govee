@@ -7,9 +7,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
+import android.graphics.Typeface
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -22,6 +25,7 @@ import dev.offgrid.govee.decode.Kind
 import dev.offgrid.govee.decode.ReadingText
 import dev.offgrid.govee.history.HistoryActivity
 import dev.offgrid.govee.history.HistoryClient
+import dev.offgrid.govee.history.HistoryException
 import dev.offgrid.govee.scan.ScanService
 import dev.offgrid.govee.store.ReadingStore
 import java.io.File
@@ -52,6 +56,7 @@ class MainActivity : AppCompatActivity() {
             alarmFor = { address, label -> ReadingStore.get(this).alarmFor(address, label) },
             onOpen = { device -> openHistory(device) },
             onAlarm = { device -> pickAlarm(device) },
+            onRename = { device -> editName(device) },
         )
         binding.list.layoutManager = LinearLayoutManager(this)
         binding.list.adapter = adapter
@@ -133,7 +138,7 @@ class MainActivity : AppCompatActivity() {
         }
         val labels = readings.map { it.label }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle(device.name.ifBlank { device.address })
+            .setTitle(device.shownName())
             .setItems(labels) { _, which -> startHistory(device, readings[which].label) }
             .show()
     }
@@ -143,7 +148,7 @@ class MainActivity : AppCompatActivity() {
             Intent(this, HistoryActivity::class.java)
                 .putExtra(HistoryActivity.EXTRA_ADDRESS, device.address)
                 .putExtra(HistoryActivity.EXTRA_LABEL, label)
-                .putExtra(HistoryActivity.EXTRA_NAME, device.name.ifBlank { device.address }),
+                .putExtra(HistoryActivity.EXTRA_NAME, device.shownName()),
         )
     }
 
@@ -177,9 +182,77 @@ class MainActivity : AppCompatActivity() {
         }
         val labels = readings.map { it.label }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle(device.name.ifBlank { device.address })
+            .setTitle(device.shownName())
             .setItems(labels) { _, which -> editAlarm(device.address, readings[which].label) }
             .show()
+    }
+
+    private fun editName(device: LiveBoard.Device) {
+        val identity = TextView(this).apply {
+            text = listOf(
+                device.name.ifBlank { device.address },
+                device.address,
+                device.readings.joinToString("\n\n") { ReadingText.block(it) },
+            ).filter { it.isNotBlank() }.joinToString("\n\n")
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text))
+            typeface = Typeface.MONOSPACE
+            textSize = 13f
+        }
+        val input = EditText(this).apply {
+            hint = getString(R.string.name_hint)
+            setText(device.alias)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSelection(text.length)
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, 0)
+            addView(identity)
+            addView(input)
+        }
+        val scroll = ScrollView(this).apply {
+            addView(column)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (360 * resources.displayMetrics.density).toInt(),
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.name_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.save) { _, _ ->
+                saveName(device.address, input.text.toString())
+            }
+            .setNeutralButton(R.string.clear) { _, _ ->
+                saveName(device.address, "")
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveName(address: String, raw: String) {
+        val token = HistoryClient.token(this)
+        if (token.isBlank()) {
+            binding.status.text = getString(R.string.name_needs_token)
+            return
+        }
+        val name = raw.trim().replace(Regex("\\s+"), " ").take(48)
+        Thread {
+            try {
+                HistoryClient().saveName(token, address, name)
+                LiveBoard.rememberAlias(address, name)
+            } catch (error: HistoryException) {
+                val text = if (error.code == 401) {
+                    getString(R.string.history_unauthorized)
+                } else {
+                    getString(R.string.history_down)
+                }
+                LiveBoard.setHistory(text)
+            } catch (_: Exception) {
+                LiveBoard.setHistory(getString(R.string.history_down))
+            }
+        }.start()
     }
 
     private fun editAlarm(address: String, label: String) {

@@ -36,8 +36,12 @@ class HistoryApp:
                 return 200, {"devices": self.history.latest()}
             if method == "GET" and route == "/v1/series":
                 return self._series(query, now)
+            if method == "GET" and route == "/v1/names":
+                return 200, {"names": self.history.names()}
             if method == "POST" and route == "/v1/readings":
                 return self._post(body)
+            if method == "POST" and route == "/v1/names":
+                return self._name(body)
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             return 400, {"error": "bad request"}
         return 404, {"error": "not found"}
@@ -72,6 +76,17 @@ class HistoryApp:
             phone_rows.append(reading)
         result = self.history.ingest(phone_rows, "phone")
         return 200, result
+
+    def _name(self, body: bytes) -> tuple[int, dict]:
+        if len(body) > 4_000:
+            return 400, {"error": "too large"}
+        payload = json.loads(body.decode("utf-8") or "{}")
+        address = payload.get("address")
+        name = payload.get("name", "")
+        if not isinstance(address, str) or not isinstance(name, str):
+            return 400, {"error": "bad request"}
+        stored = self.history.set_name(address, name)
+        return 200, {"address": address.strip().upper(), "name": stored}
 
 
 def serve(history: History, token: str, host: str, port: int) -> ThreadingHTTPServer:
@@ -136,16 +151,29 @@ def render_index(history: History, now_ms: int | None = None) -> str:
 
     now = int(time.time() * 1000) if now_ms is None else now_ms
     health = history.health()
-    devices = sorted(history.latest(), key=lambda item: str(item.get("name") or item.get("address")))
+    aliases = {key.upper(): value for key, value in history.names().items()}
+    devices = sorted(
+        history.latest(),
+        key=lambda item: (
+            aliases.get(str(item.get("address") or "").upper())
+            or str(item.get("name") or item.get("address"))
+        ).lower(),
+    )
     rows = []
     for device in devices:
         temp = device.get("temp_c")
         humidity = device.get("humidity_pct")
         battery = device.get("battery_pct")
         shown = None if temp is None or temp == "" else _fahrenheit(float(temp))
+        hardware = str(device.get("name") or device.get("address") or "")
+        alias = aliases.get(str(device.get("address") or "").upper(), "")
+        if alias and alias != hardware:
+            label = f"{_esc(alias)}<br><span style=\"color:#8B937E\">{_esc(hardware)}</span>"
+        else:
+            label = _esc(alias or hardware)
         rows.append(
             "<tr>"
-            f"<td>{_esc(device.get('name') or device.get('address'))}</td>"
+            f"<td>{label}</td>"
             f"<td>{_esc(device.get('address'))}</td>"
             f"<td>{_num(shown)}</td>"
             f"<td>{_num(humidity)}</td>"

@@ -82,6 +82,11 @@ CREATE TABLE IF NOT EXISTS status (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS aliases (
+    address TEXT PRIMARY KEY,
+    name TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS raw_bucket ON raw(bucket);
 CREATE INDEX IF NOT EXISTS roll_15m_bucket ON roll_15m(bucket);
 CREATE INDEX IF NOT EXISTS roll_6h_bucket ON roll_6h(bucket);

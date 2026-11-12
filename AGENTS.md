@@ -107,6 +107,8 @@ GET is open on the LAN, including `GET /`, which is a plain HTML list of sensors
 
 Temperatures are stored as Celsius (`temp_c`). The phone and the Pi page show Fahrenheit. Alarm thresholds are entered in Fahrenheit and saved as Celsius. Do not change the stored unit.
 
+A display name is separate from the advertised name. `aliases` is keyed by uppercased address. `GET /v1/names` is open. `POST /v1/names` needs the bearer token and stores at most 48 characters; a blank name deletes the row. The phone long-press editor shows the advertised name, address, and readings, then saves the typed name. The list, graph title, alarm title, and Pi page show that name instead of the advertisement. Do not write the alias over `latest.name`. The advertisement is how the decoder recognizes the model.
+
 The phone list is the sensors it is hearing, plus every sensor in `GET /v1/latest` that it is not hearing. `fromBound` on those rows means "from the Pi", and the row says `history` rather than a signal strength. Graphs load without a token. Uploads still need one. The 3-minute and 30-minute charts read raw buckets, so they are empty when the newest sample is older than the window. The 3-day chart reads `roll_15m`.
 
 Android cleartext domain-config does not apply to an IP literal. `network_security_config.xml` allows cleartext in the base config, and `HistoryClient` is the allowlist: host `10.0.0.69`, port `8787`, and a `check` that the host string stays that value.

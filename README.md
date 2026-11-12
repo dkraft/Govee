@@ -6,7 +6,7 @@ The Pi manages the H5151. A sensor bound to that gateway is the gateway's sensor
 
 The Pi sends only the existing status query (`0x33`, command `0xAA`). It does not send power, color, reset, or Wi-Fi provisioning frames. A bind command is not sent until a captured notify from this gateway names a sub-device. Until then the bound set stays empty, the phone uploads every sensor it decodes, and `/health` says the gateway is not supplying readings.
 
-Version 0.2.2. Temperatures on the phone and on the Pi page are Fahrenheit. The stored samples stay Celsius.
+Version 0.2.3. Temperatures on the phone and on the Pi page are Fahrenheit. The stored samples stay Celsius. Long-press a row to name that sensor. The name is saved on the Pi and shown instead of the advertised name. The edit screen still shows the advertised name, address, and readings.
 
 ## What you can read
 
@@ -42,12 +42,12 @@ The H5151 that was in range while this was written advertised manufacturer id `0
 
 ## Sideload
 
-The sideload build is the 0.2.2 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key.
+The sideload build is the 0.2.3 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key. Play Protect blocks a browser install of that debug signature. Install it with adb.
 
-https://github.com/dkraft/Govee/releases/download/v0.2.2/govee-offgrid-0.2.2.apk
+https://github.com/dkraft/Govee/releases/download/v0.2.3/govee-offgrid-0.2.3.apk
 
 ```
-adb install -r govee-offgrid-0.2.2.apk
+adb install -r govee-offgrid-0.2.3.apk
 ```
 
 On first launch the app asks for Bluetooth scan and connect, and for the history-server token. On Android 12 and older it asks for fine location instead, because that is how those versions gate BLE scans. Notifications are used for the ongoing scan and for alarms. Grant them if you want alarms while the screen is off. The app has an Internet permission so it can reach `10.0.0.69`. It does not call any other host.

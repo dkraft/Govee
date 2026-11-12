@@ -36,7 +36,8 @@ RANGES = {
 
 METRICS = ("temp_c", "humidity_pct", "battery_pct", "co2_ppm", "pm25")
 PROBE = re.compile(r"probe (\d+)=(-?\d+(?:\.\d+)?)")
-VERSION = "0.2.2"
+VERSION = "0.2.3"
+NAME_LIMIT = 48
 
 
 def floor_bucket(timestamp_ms: int, size_ms: int) -> int:
@@ -138,6 +139,30 @@ class History:
                 self._put_latest(address, label, metric, seen_at, float(value), source, name, model)
         self.db.commit()
         return {"stored": stored, "dropped_bound": dropped_bound, "dropped_empty": dropped_empty}
+
+    def names(self) -> dict[str, str]:
+        rows = self.db.execute("SELECT address, name FROM aliases ORDER BY address").fetchall()
+        return {row["address"]: row["name"] for row in rows}
+
+    def set_name(self, address: str, name: str) -> str:
+        key = str(address or "").strip().upper()
+        if not key or len(key) > 32 or any(ord(char) < 32 for char in key):
+            raise ValueError("address")
+        cleaned = " ".join(str(name or "").split())
+        if len(cleaned) > NAME_LIMIT:
+            raise ValueError("name")
+        if not cleaned:
+            self.db.execute("DELETE FROM aliases WHERE address = ?", (key,))
+        else:
+            self.db.execute(
+                """
+                INSERT INTO aliases(address, name) VALUES(?, ?)
+                ON CONFLICT(address) DO UPDATE SET name = excluded.name
+                """,
+                (key, cleaned),
+            )
+        self.db.commit()
+        return cleaned
 
     def latest(self) -> list[dict]:
         rows = self.db.execute(

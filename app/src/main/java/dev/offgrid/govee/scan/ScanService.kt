@@ -196,6 +196,7 @@ class ScanService : Service() {
             BoundDevices.replace(bound)
             val latest = client.latest(token)
             LiveBoard.applyBound(latest)
+            LiveBoard.applyAliases(client.names())
             LiveBoard.noteGateways("Pi gateway: $gateway")
             latest.forEach { sample -> considerAlarm(sample.address, sample.name, sample.toReading()) }
             if (token.isBlank()) {
@@ -253,7 +254,7 @@ class ScanService : Service() {
         val text = "${reading.label} ${ReadingText.temp(value)} is outside $bounds"
         val notification = NotificationCompat.Builder(this, ALARM_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat)
-            .setContentTitle(name.ifBlank { reading.model })
+            .setContentTitle(LiveBoard.displayName(address, name.ifBlank { reading.model }))
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

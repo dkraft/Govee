@@ -6,7 +6,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-from server import HistoryApp, serve
+from server import HistoryApp, render_index, serve
 from store import ROLL_15M_MS, ROLL_1D_MS, RAW_KEEP_MS, History
 
 
@@ -201,6 +201,41 @@ class HttpTest(unittest.TestCase):
         self.assertIn("Govee_H5075_ABCD", page)
         self.assertIn("70.7", page)
         self.assertIn("°F", page)
+
+    def test_name_is_saved_and_shown_instead_of_the_advertised_name(self):
+        self.history.ingest([reading(NOW, 21.5)], "phone", now_ms=NOW)
+        app = HistoryApp(self.history, self.token)
+        denied, _ = app.handle(
+            "POST",
+            "/v1/names",
+            json.dumps({"address": ADDRESS.lower(), "name": "  Pantry  shelf "}).encode(),
+            "",
+        )
+        self.assertEqual(denied, 401)
+        status, saved = app.handle(
+            "POST",
+            "/v1/names",
+            json.dumps({"address": ADDRESS.lower(), "name": "  Pantry  shelf "}).encode(),
+            f"Bearer {self.token}",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(saved["address"], ADDRESS)
+        self.assertEqual(saved["name"], "Pantry shelf")
+        status, listed = app.handle("GET", "/v1/names", b"", "")
+        self.assertEqual(status, 200)
+        self.assertEqual(listed["names"][ADDRESS], "Pantry shelf")
+        page = render_index(self.history, now_ms=NOW)
+        self.assertIn("Pantry shelf", page)
+        self.assertIn("Govee_H5075_ABCD", page)
+        cleared, empty = app.handle(
+            "POST",
+            "/v1/names",
+            json.dumps({"address": ADDRESS, "name": "   "}).encode(),
+            f"Bearer {self.token}",
+        )
+        self.assertEqual(cleared, 200)
+        self.assertEqual(empty["name"], "")
+        self.assertEqual(self.history.names(), {})
 
     def test_post_and_series_round_trip(self):
         body = json.dumps({"readings": [reading(NOW, 21.5)]}).encode()

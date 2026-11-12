@@ -49,6 +49,23 @@ class HistoryClient {
         return out
     }
 
+    fun names(): Map<String, String> {
+        val listed = get("/v1/names", "").getJSONObject("names")
+        val out = HashMap<String, String>()
+        val keys = listed.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = listed.optString(key).trim()
+            if (value.isNotEmpty()) out[key.uppercase()] = value
+        }
+        return out
+    }
+
+    fun saveName(token: String, address: String, name: String) {
+        val body = JSONObject().put("address", address).put("name", name)
+        send("POST", "/v1/names", token, body.toString())
+    }
+
     fun post(token: String, rows: List<ReadingStore.Pending>): Boolean {
         if (rows.isEmpty()) return true
         val readings = JSONArray()

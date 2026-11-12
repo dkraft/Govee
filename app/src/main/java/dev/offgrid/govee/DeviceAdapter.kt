@@ -14,6 +14,7 @@ class DeviceAdapter(
     private val alarmFor: (address: String, label: String) -> ReadingStore.Alarm?,
     private val onOpen: (LiveBoard.Device) -> Unit,
     private val onAlarm: (LiveBoard.Device) -> Unit,
+    private val onRename: (LiveBoard.Device) -> Unit,
 ) : RecyclerView.Adapter<DeviceAdapter.Holder>() {
     private val devices = mutableListOf<LiveBoard.Device>()
 
@@ -39,7 +40,7 @@ class DeviceAdapter(
             val now = System.currentTimeMillis()
             val stale = now - device.seenAt > LiveBoard.STALE_MS
             binding.root.alpha = if (stale) 0.45f else 1f
-            binding.name.text = device.name.ifBlank { device.address }
+            binding.name.text = device.shownName()
             val age = ReadingText.age(device.seenAt, now)
             val staleLabel = if (stale) "  stale" else ""
             val where = if (device.fromBound) "history" else "${device.rssi} dBm"
@@ -58,6 +59,10 @@ class DeviceAdapter(
             binding.extra.text = extra
             val sensor = device.readings.any { it.kind == Kind.SENSOR }
             binding.root.setOnClickListener { if (sensor) onOpen(device) }
+            binding.root.setOnLongClickListener {
+                onRename(device)
+                true
+            }
             val hasTemp = device.readings.any { ReadingText.temperatures(it).isNotEmpty() }
             binding.alarm.visibility = if (hasTemp) View.VISIBLE else View.GONE
             binding.alarm.setOnClickListener { onAlarm(device) }
