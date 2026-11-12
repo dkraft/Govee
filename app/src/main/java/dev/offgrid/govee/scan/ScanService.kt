@@ -28,18 +28,24 @@ import dev.offgrid.govee.decode.GoveeDecoder
 import dev.offgrid.govee.decode.Kind
 import dev.offgrid.govee.decode.Reading
 import dev.offgrid.govee.decode.ReadingText
-import dev.offgrid.govee.gateway.GatewayLink
+import dev.offgrid.govee.history.HistoryClient
+import dev.offgrid.govee.history.HistoryException
+import dev.offgrid.govee.store.BoundDevices
+import dev.offgrid.govee.store.PhoneUpload
 import dev.offgrid.govee.store.ReadingStore
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
- * Foreground BLE scan. Advertisements are decoded on the phone and stored
- * in the local database. There is no network call.
+ * Foreground BLE scan. Bound sensors are left to the Pi. Unbound sensor
+ * readings are stored on the phone and posted to 10.0.0.69.
  */
 class ScanService : Service() {
     private var scanning = false
-    private var link: GatewayLink? = null
     private val alarming = HashSet<String>()
     private val store by lazy { ReadingStore.get(this) }
+    private val client = HistoryClient()
+    private val sync = Executors.newSingleThreadScheduledExecutor()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -79,6 +85,7 @@ class ScanService : Service() {
         } else {
             registerReceiver(bluetoothReceiver, filter)
         }
+        sync.scheduleWithFixedDelay({ syncOnce() }, 3, 30, TimeUnit.SECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,16 +93,10 @@ class ScanService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 stopScanQuiet()
-                link?.close()
-                link = null
                 LiveBoard.setScanning(false, "Stopped")
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
-            }
-            ACTION_LINK -> {
-                linkTo(intent.getStringExtra(EXTRA_ADDRESS))
-                return START_STICKY
             }
             else -> {
                 startScan()
@@ -105,8 +106,8 @@ class ScanService : Service() {
     }
 
     override fun onDestroy() {
+        sync.shutdownNow()
         stopScanQuiet()
-        link?.close()
         unregisterReceiver(bluetoothReceiver)
         super.onDestroy()
     }
@@ -175,10 +176,42 @@ class ScanService : Service() {
         if (found.isEmpty()) return
         val seenAt = System.currentTimeMillis()
         val address = result.device.address
+        val sensors = found.filter { it.kind == Kind.SENSOR }
+        if (sensors.isNotEmpty() && !PhoneUpload.shouldKeep(address, BoundDevices.snapshot())) {
+            return
+        }
         LiveBoard.upsert(address, name, result.rssi, seenAt, found)
         found.forEach { reading ->
+            if (reading.kind == Kind.SENSOR && !PhoneUpload.shouldKeep(address, BoundDevices.snapshot())) return@forEach
             store.record(address, name, result.rssi, seenAt, reading)
             considerAlarm(address, name, reading)
+        }
+    }
+
+    private fun syncOnce() {
+        val token = HistoryClient.token(this)
+        if (token.isBlank()) {
+            LiveBoard.setHistory("history needs a token")
+            return
+        }
+        try {
+            val gateway = client.gatewayState(token)
+            val bound = client.bound(token)
+            BoundDevices.replace(bound)
+            val latest = client.latest(token).filter { it.address in bound }
+            LiveBoard.applyBound(latest)
+            LiveBoard.noteGateways("Pi gateway: $gateway")
+            latest.forEach { sample -> considerAlarm(sample.address, sample.name, sample.toReading()) }
+            val pending = store.pending(200)
+            if (pending.isNotEmpty() && client.post(token, pending)) {
+                store.markUploaded(pending.map { it.id })
+            }
+            val noun = if (bound.size == 1) "1 bound" else "${bound.size} bound"
+            LiveBoard.setHistory("history up · $noun · gateway $gateway")
+        } catch (error: HistoryException) {
+            LiveBoard.setHistory(if (error.code == 401) "history unauthorized" else "history unreachable")
+        } catch (_: Exception) {
+            LiveBoard.setHistory("history unreachable")
         }
     }
 
@@ -227,27 +260,6 @@ class ScanService : Service() {
             .build()
         val id = (address + reading.label).hashCode()
         getSystemService(NotificationManager::class.java).notify(id, notification)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun linkTo(address: String?) {
-        if (address.isNullOrBlank()) return
-        if (!connectPermitted()) {
-            LiveBoard.note(address, "Bluetooth connect permission is missing.")
-            return
-        }
-        val adapter = adapter()
-        if (adapter == null || !adapter.isEnabled) {
-            LiveBoard.note(address, "Bluetooth is off.")
-            return
-        }
-        link?.close()
-        LiveBoard.note(address, "Linking…")
-        val session = GatewayLink(this, adapter) { text ->
-            LiveBoard.note(address, text)
-        }
-        link = session
-        session.start(address)
     }
 
     private fun startInForeground() {
@@ -308,17 +320,8 @@ class ScanService : Service() {
         return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun connectPermitted(): Boolean {
-        if (Build.VERSION.SDK_INT < 31) return true
-        return ContextCompat.checkSelfPermission(
-            this,
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
     companion object {
         const val ACTION_STOP = "dev.offgrid.govee.STOP"
-        const val ACTION_LINK = "dev.offgrid.govee.LINK"
         const val EXTRA_ADDRESS = "address"
         private const val SCAN_CHANNEL = "scan"
         private const val ALARM_CHANNEL = "alarms"

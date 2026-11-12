@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Govee Off-Grid</string>
-    <string name="tagline">Local sensors. The phone is the gateway.</string>
+    <string name="tagline">Local sensors. History stays on the LAN.</string>
     <string name="scan">Scan</string>
     <string name="stop">Stop</string>
     <string name="export_csv">Export CSV</string>
-    <string name="link_gateway">Link gateway</string>
     <string name="set_alarm">Alarm</string>
+    <string name="server">Server</string>
+    <string name="server_title">History server</string>
+    <string name="server_hint">Token from the Pi</string>
+    <string name="history_empty">No points in this range.</string>
+    <string name="history_down">History server unreachable.</string>
+    <string name="history_unauthorized">History server rejected the token.</string>
+    <string name="history_token">Set the history server token first.</string>
+    <string name="history_loading">Loading history…</string>
     <string name="empty">No Govee hardware yet.</string>
     <string name="scanning_notification">Reading nearby Govee sensors</string>
     <string name="alarm_channel">Sensor alarms</string>

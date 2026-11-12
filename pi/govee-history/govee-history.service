@@ -1,0 +1,12 @@
+[Unit]
+Description=Govee graph history
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/govee-history/server.py --host 10.0.0.69 --port 8787 --db /var/lib/govee-history/history.db --token-file /etc/govee-history/token
+Restart=on-failure
+User=govee
+
+[Install]
+WantedBy=multi-user.target

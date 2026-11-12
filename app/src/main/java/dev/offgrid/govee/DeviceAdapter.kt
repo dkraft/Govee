@@ -12,7 +12,7 @@ import dev.offgrid.govee.store.ReadingStore
 
 class DeviceAdapter(
     private val alarmFor: (address: String, label: String) -> ReadingStore.Alarm?,
-    private val onLink: (String) -> Unit,
+    private val onOpen: (LiveBoard.Device) -> Unit,
     private val onAlarm: (LiveBoard.Device) -> Unit,
 ) : RecyclerView.Adapter<DeviceAdapter.Holder>() {
     private val devices = mutableListOf<LiveBoard.Device>()
@@ -42,7 +42,8 @@ class DeviceAdapter(
             binding.name.text = device.name.ifBlank { device.address }
             val age = ReadingText.age(device.seenAt, now)
             val staleLabel = if (stale) "  stale" else ""
-            binding.meta.text = "${device.address}   ${device.rssi} dBm   $age$staleLabel"
+            val where = if (device.fromBound) "gateway" else "${device.rssi} dBm"
+            binding.meta.text = "${device.address}   $where   $age$staleLabel"
             binding.values.text = device.readings.joinToString("\n\n") { ReadingText.block(it) }
             val alarmLines = device.readings.mapNotNull { reading ->
                 val alarm = alarmFor(device.address, reading.label) ?: return@mapNotNull null
@@ -55,9 +56,8 @@ class DeviceAdapter(
             val extra = (alarmLines + listOfNotNull(device.gatewayNote)).joinToString("\n")
             binding.extra.visibility = if (extra.isBlank()) View.GONE else View.VISIBLE
             binding.extra.text = extra
-            val gateway = device.readings.any { it.kind == Kind.GATEWAY }
-            binding.link.visibility = if (gateway) View.VISIBLE else View.GONE
-            binding.link.setOnClickListener { onLink(device.address) }
+            val sensor = device.readings.any { it.kind == Kind.SENSOR }
+            binding.root.setOnClickListener { if (sensor) onOpen(device) }
             val hasTemp = device.readings.any { ReadingText.temperatures(it).isNotEmpty() }
             binding.alarm.visibility = if (hasTemp) View.VISIBLE else View.GONE
             binding.alarm.setOnClickListener { onAlarm(device) }

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import dev.offgrid.govee.decode.Kind
 import dev.offgrid.govee.decode.Reading
 import java.time.Instant
 import java.time.ZoneOffset
@@ -14,9 +15,24 @@ import java.time.format.DateTimeFormatter
  * are deleted as new ones are written.
  */
 class ReadingStore private constructor(context: Context) :
-    SQLiteOpenHelper(context.applicationContext, "govee.db", null, 1) {
+    SQLiteOpenHelper(context.applicationContext, "govee.db", null, 2) {
 
     data class Alarm(val highC: Double?, val lowC: Double?)
+
+    data class Pending(
+        val id: Long,
+        val address: String,
+        val name: String,
+        val model: String,
+        val label: String,
+        val seenAt: Long,
+        val temp: Double?,
+        val humidity: Double?,
+        val battery: Int?,
+        val co2: Int?,
+        val pm25: Int?,
+        val extra: String,
+    )
 
     private val lastWrite = HashMap<String, Write>()
 
@@ -36,7 +52,8 @@ class ReadingStore private constructor(context: Context) :
                 pm25 INTEGER,
                 extra TEXT,
                 rssi INTEGER,
-                seen_at INTEGER NOT NULL
+                seen_at INTEGER NOT NULL,
+                upload_state INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
         )
@@ -54,7 +71,18 @@ class ReadingStore private constructor(context: Context) :
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE readings ADD COLUMN upload_state INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                """
+                UPDATE readings SET upload_state = -1
+                WHERE temp IS NULL AND humidity IS NULL AND co2 IS NULL AND pm25 IS NULL
+                  AND (extra IS NULL OR extra = '')
+                """.trimIndent(),
+            )
+        }
+    }
 
     fun record(
         address: String,
@@ -95,6 +123,8 @@ class ReadingStore private constructor(context: Context) :
             put("extra", extra)
             put("rssi", rssi)
             put("seen_at", seenAt)
+            val upload = reading.kind == Kind.SENSOR && PhoneUpload.shouldKeep(address, BoundDevices.snapshot())
+            put("upload_state", if (upload) 0 else -1)
         }
         writableDatabase.insert("readings", null, values)
         writableDatabase.delete("readings", "seen_at < ?", arrayOf((seenAt - RETENTION_MS).toString()))
@@ -184,6 +214,50 @@ class ReadingStore private constructor(context: Context) :
             }
         }
         return builder.toString()
+    }
+
+    fun pending(limit: Int): List<Pending> {
+        val out = mutableListOf<Pending>()
+        readableDatabase.query(
+            "readings",
+            arrayOf(
+                "id", "address", "name", "model", "label", "seen_at",
+                "temp", "humidity", "battery", "co2", "pm25", "extra",
+            ),
+            "upload_state = 0",
+            null,
+            null,
+            null,
+            "seen_at ASC",
+            limit.toString(),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                out += Pending(
+                    id = cursor.getLong(0),
+                    address = cursor.getString(1).orEmpty(),
+                    name = cursor.getString(2).orEmpty(),
+                    model = cursor.getString(3).orEmpty(),
+                    label = cursor.getString(4).orEmpty(),
+                    seenAt = cursor.getLong(5),
+                    temp = if (cursor.isNull(6)) null else cursor.getDouble(6),
+                    humidity = if (cursor.isNull(7)) null else cursor.getDouble(7),
+                    battery = if (cursor.isNull(8)) null else cursor.getInt(8),
+                    co2 = if (cursor.isNull(9)) null else cursor.getInt(9),
+                    pm25 = if (cursor.isNull(10)) null else cursor.getInt(10),
+                    extra = cursor.getString(11).orEmpty(),
+                )
+            }
+        }
+        return out
+    }
+
+    fun markUploaded(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        val marks = ids.joinToString(",") { "?" }
+        writableDatabase.execSQL(
+            "UPDATE readings SET upload_state = 1 WHERE id IN ($marks)",
+            ids.map { it.toString() }.toTypedArray(),
+        )
     }
 
     fun hasRows(): Boolean {

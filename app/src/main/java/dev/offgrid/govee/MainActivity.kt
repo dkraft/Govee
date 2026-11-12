@@ -18,7 +18,10 @@ import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import dev.offgrid.govee.board.LiveBoard
 import dev.offgrid.govee.databinding.ActivityMainBinding
+import dev.offgrid.govee.decode.Kind
 import dev.offgrid.govee.decode.ReadingText
+import dev.offgrid.govee.history.HistoryActivity
+import dev.offgrid.govee.history.HistoryClient
 import dev.offgrid.govee.scan.ScanService
 import dev.offgrid.govee.store.ReadingStore
 import java.io.File
@@ -47,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         adapter = DeviceAdapter(
             alarmFor = { address, label -> ReadingStore.get(this).alarmFor(address, label) },
-            onLink = { address -> send(ScanService.ACTION_LINK, address) },
+            onOpen = { device -> openHistory(device) },
             onAlarm = { device -> pickAlarm(device) },
         )
         binding.list.layoutManager = LinearLayoutManager(this)
@@ -61,6 +64,11 @@ class MainActivity : AppCompatActivity() {
             send(ScanService.ACTION_STOP, null)
         }
         binding.exportCsv.setOnClickListener { exportCsv() }
+        binding.server.setOnClickListener { editToken() }
+        if (!prefs.getBoolean(TOKEN_ASKED, false)) {
+            prefs.edit().putBoolean(TOKEN_ASKED, true).apply()
+            editToken()
+        }
         if (prefs.getBoolean(WANTED, true)) ensureScan()
     }
 
@@ -77,7 +85,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(state: LiveBoard.UiState) {
         val count = if (state.devices.size == 1) "1 device" else "${state.devices.size} devices"
-        binding.status.text = "${state.status}   ·   $count"
+        binding.status.text = if (state.history.isBlank()) {
+            "${state.status}   ·   $count"
+        } else {
+            "${state.status}   ·   $count\n${state.history}"
+        }
         binding.empty.visibility = if (state.devices.isEmpty()) View.VISIBLE else View.GONE
         adapter.submit(state.devices)
     }
@@ -110,6 +122,50 @@ class MainActivity : AppCompatActivity() {
         } catch (_: android.content.ActivityNotFoundException) {
             binding.status.text = "Bluetooth is off"
         }
+    }
+
+    private fun openHistory(device: LiveBoard.Device) {
+        val readings = device.readings.filter { it.kind == Kind.SENSOR }
+        if (readings.isEmpty()) return
+        if (readings.size == 1) {
+            startHistory(device, readings[0].label)
+            return
+        }
+        val labels = readings.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(device.name.ifBlank { device.address })
+            .setItems(labels) { _, which -> startHistory(device, readings[which].label) }
+            .show()
+    }
+
+    private fun startHistory(device: LiveBoard.Device, label: String) {
+        startActivity(
+            Intent(this, HistoryActivity::class.java)
+                .putExtra(HistoryActivity.EXTRA_ADDRESS, device.address)
+                .putExtra(HistoryActivity.EXTRA_LABEL, label)
+                .putExtra(HistoryActivity.EXTRA_NAME, device.name.ifBlank { device.address }),
+        )
+    }
+
+    private fun editToken() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.server_hint)
+            setText(HistoryClient.token(this@MainActivity))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val wrap = LinearLayout(this).apply {
+            setPadding(pad, pad, pad, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.server_title)
+            .setView(wrap)
+            .setPositiveButton(R.string.save) { _, _ ->
+                HistoryClient.saveToken(this, input.text.toString().trim())
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun pickAlarm(device: LiveBoard.Device) {
@@ -201,5 +257,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val PREFS = "govee"
         private const val WANTED = "scanning"
+        private const val TOKEN_ASKED = "token_asked"
     }
 }

@@ -1,10 +1,12 @@
 # Govee Off-Grid
 
-An Android app that reads Govee sensors over Bluetooth Low Energy and keeps the history on the phone. It does not use the Govee cloud, and the app has no Internet permission.
+An Android app that reads Govee sensors over Bluetooth Low Energy. Long history lives on a Raspberry Pi on the LAN (`10.0.0.69`). The app does not use the Govee cloud.
 
-The phone takes the place of the Wi-Fi uplink. A gateway such as the H5151 is still useful hardware: the app shows that it is nearby, reads its Device Information service, and, when the standard Govee control service is present, sends one status query. Sensor values come from the sensors' own advertisements, which is what keeps working when the gateway has no route off the site.
+The Pi manages the H5151. A sensor bound to that gateway is the gateway's sensor: the phone does not store or upload it. The phone BLE-reads sensors that are not bound and posts those readings to the Pi. Graphs on the phone request the Pi. Six ranges: 3 min, 30 min, 3 day, 3 month, 1 year, 3 year.
 
-Version 0.1.0.
+The Pi sends only the existing status query (`0x33`, command `0xAA`). It does not send power, color, reset, or Wi-Fi provisioning frames. A bind command is not sent until a captured notify from this gateway names a sub-device. Until then the bound set stays empty, the phone uploads every sensor it decodes, and `/health` says the gateway is not supplying readings.
+
+Version 0.2.0.
 
 ## What you can read
 
@@ -18,25 +20,37 @@ Advertisements are decoded for the public packet layouts of:
 
 Other Govee devices that are heard, including lights such as the H7021, are listed as seen. The app does not send power, color, reset, or Wi-Fi provisioning commands.
 
-A row goes stale two minutes after the last advertisement. History is kept in a local SQLite database for 14 days. High and low temperature alarms are stored on the phone and raise a local notification. CSV export uses the Android share sheet.
+A row goes stale two minutes after the last advertisement. The phone still keeps a local SQLite buffer for 14 days, for alarms and CSV export. High and low temperature alarms are stored on the phone and raise a local notification. CSV export uses the Android share sheet and the phone's own rows, which are the unbound sensors.
 
-## Gateway link
+## History server
 
-Tap **Link gateway** on an H5151 row. The phone connects over BLE and reads manufacturer, model, serial, hardware, and firmware when the device publishes them.
+`pi/govee-history/` is installed on the Pi at `10.0.0.69` (hostname `mqtt`, Raspberry Pi 3 Model B Plus, Debian 13). The database is `/var/lib/govee-history/history.db` on the root disk (`/dev/sda2`, hundreds of gigabytes free). The HTTP process listens only on `10.0.0.69:8787`. That port was free. The MQTT broker on port 1883 is still running and is not used by this service. A bearer token in `/etc/govee-history/token` (mode 600, user `govee`) is entered once in the app under **Server**. The phone refuses any other host.
 
-If the control service `00010203-0405-0607-0809-0a0b0c0d1910` is present, the app writes one 20-byte status frame (`0x33`, command `0xAA`, XOR checksum) and shows the notify that comes back. If that service is absent, the gateway only uplinks over Wi-Fi. The phone keeps reading the sensors directly.
+Raw samples are 10-second buckets kept 36 hours. Rollups are 15 minutes (100 days), 6 hours (400 days), and 1 day (3 years and 40 days). The 3-year chart averages those days into 3-day buckets.
 
-The H5151 that was in range while this was written advertised manufacturer id `0x8801` with a 4-byte payload and did not carry a temperature. Expect the same.
+The gateway process is the only Bluetooth connection to the H5151. It holds the link, writes the status query, then once a minute scans briefly for sensors to bind later. Nothing is marked bound until a notify layout is known. The phone polls `GET /v1/bound` and skips those addresses.
+
+The onboard adapter `hci0` is present and nothing else uses it. It boots soft-blocked because `/etc/modprobe.d/rfkill_default.conf` sets `default_state=0`. `govee-bt.service` clears that block and powers the adapter. Boot config is unchanged.
+
+The H5151 `Govee_H5151_2036` (`C8:6B:84:C6:20:36`) is in range. The Pi 3 controller brings the link up and then drops it before GATT (`le-connection-abort-by-local`), so the status query is not sent and the bound set stays empty. A failed attempt waits 60 seconds before the next one, so the shared Wi-Fi radio is not hammered. Three H5100 sensors were heard and stored as candidates, not bound. The phone uploads those.
+
+## Gateway
+
+The phone no longer connects to the H5151. `GatewayLink` remains the frame reference the Pi port copies: service `00010203-0405-0607-0809-0a0b0c0d1910`, one 20-byte status frame, XOR checksum.
+
+The H5151 that was in range while this was written advertised manufacturer id `0x8801` with a 4-byte payload and did not carry a temperature. Expect the same. If the control service is absent, the Pi reports that and the phone keeps uploading what it hears.
 
 ## Sideload
 
-The release asset is a debug-signed APK, `govee-offgrid-0.1.0.apk`. Debug signing is enough to install on a phone you control. It is not a Play Store upload key.
+The sideload build is the 0.2.0 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key.
+
+https://github.com/dkraft/Govee/releases/download/v0.2.0/govee-offgrid-0.2.0.apk
 
 ```
-adb install -r govee-offgrid-0.1.0.apk
+adb install -r govee-offgrid-0.2.0.apk
 ```
 
-On first launch the app asks for Bluetooth scan and connect. On Android 12 and older it asks for fine location instead, because that is how those versions gate BLE scans. Notifications are used for the ongoing scan and for alarms. Grant them if you want alarms while the screen is off.
+On first launch the app asks for Bluetooth scan and connect, and for the history-server token. On Android 12 and older it asks for fine location instead, because that is how those versions gate BLE scans. Notifications are used for the ongoing scan and for alarms. Grant them if you want alarms while the screen is off. The app has an Internet permission so it can reach `10.0.0.69`. It does not call any other host.
 
 Leave the scan running. Android keeps it in a foreground service so the history continues when the screen is locked. Stop ends the scan.
 
@@ -51,7 +65,13 @@ echo "sdk.dir=/path/to/android-sdk" > local.properties
 
 The sideload APK is `app/build/outputs/apk/debug/app-debug.apk`. `local.properties`, keystores, and built APKs are gitignored.
 
-`./gradlew test` runs the decoder checks, including an H5075 packet of 21.5 °C / 45% RH, a negative temperature, an H5074 packet, and an H5151 advertisement that must stay a gateway.
+`./gradlew test` runs the decoder checks, including an H5075 packet of 21.5 °C / 45% RH, a negative temperature, an H5074 packet, and an H5151 advertisement that must stay a gateway. It also checks that a bound address is not uploaded.
+
+```
+cd pi/govee-history && python3 test_server.py && python3 test_decode.py && python3 test_gateway.py
+```
+
+Those checks cover the six ranges, bound-address rejection, the same four advertisements, and the rule that discovery does not bind a sensor and does not send any command except the status query.
 
 ## License
 

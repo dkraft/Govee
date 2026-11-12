@@ -1,0 +1,7 @@
+[Unit]
+Description=Govee history rollup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/govee-history/server.py --rollup-only --db /var/lib/govee-history/history.db --token-file /etc/govee-history/token
+User=govee

@@ -2,7 +2,9 @@ package dev.offgrid.govee.board
 
 import android.os.Handler
 import android.os.Looper
+import dev.offgrid.govee.decode.Kind
 import dev.offgrid.govee.decode.Reading
+import dev.offgrid.govee.history.RemoteSample
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -19,11 +21,13 @@ object LiveBoard {
         val seenAt: Long,
         val readings: List<Reading>,
         val gatewayNote: String? = null,
+        val fromBound: Boolean = false,
     )
 
     data class UiState(
         val scanning: Boolean,
         val status: String,
+        val history: String,
         val devices: List<Device>,
     )
 
@@ -32,6 +36,7 @@ object LiveBoard {
     private val main = Handler(Looper.getMainLooper())
     private var scanning = false
     private var status = "Idle"
+    @Volatile private var historyNote = ""
 
     fun upsert(address: String, name: String, rssi: Int, seenAt: Long, readings: List<Reading>) {
         synchronized(devices) {
@@ -44,6 +49,7 @@ object LiveBoard {
                 seenAt = seenAt,
                 readings = readings,
                 gatewayNote = prev?.gatewayNote,
+                fromBound = false,
             )
         }
         publish()
@@ -63,6 +69,47 @@ object LiveBoard {
         publish()
     }
 
+    fun noteGateways(text: String) {
+        synchronized(devices) {
+            devices.entries.forEach { (address, device) ->
+                if (device.readings.any { it.kind == Kind.GATEWAY }) {
+                    devices[address] = device.copy(gatewayNote = text)
+                }
+            }
+        }
+        publish()
+    }
+
+    fun setHistory(text: String) {
+        historyNote = text
+        publish()
+    }
+
+    fun applyBound(samples: List<RemoteSample>) {
+        synchronized(devices) {
+            val addresses = samples.map { it.address }.toSet()
+            val iterator = devices.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                if (entry.value.fromBound && entry.key !in addresses) iterator.remove()
+            }
+            samples.groupBy { it.address }.forEach { (address, rows) ->
+                val first = rows.first()
+                val previous = devices[address]
+                devices[address] = Device(
+                    address = address,
+                    name = first.name.ifBlank { first.model.ifBlank { previous?.name.orEmpty() } },
+                    rssi = previous?.rssi ?: 0,
+                    seenAt = rows.maxOf { it.seenAt },
+                    readings = rows.map { it.toReading() },
+                    gatewayNote = previous?.gatewayNote,
+                    fromBound = true,
+                )
+            }
+        }
+        publish()
+    }
+
     fun listen(listener: (UiState) -> Unit): () -> Unit {
         listeners += listener
         listener(snapshot())
@@ -76,6 +123,7 @@ object LiveBoard {
         return UiState(
             scanning = scanning,
             status = status,
+            history = historyNote,
             devices = copy.sortedByDescending { it.rssi },
         )
     }

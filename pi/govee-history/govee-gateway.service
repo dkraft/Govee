@@ -1,0 +1,15 @@
+[Unit]
+Description=Govee H5151 manager
+After=bluetooth.target govee-bt.service
+Requires=bluetooth.target
+Wants=govee-bt.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/govee-history/gateway.py --db /var/lib/govee-history/history.db
+Restart=on-failure
+User=govee
+SupplementaryGroups=bluetooth
+
+[Install]
+WantedBy=multi-user.target

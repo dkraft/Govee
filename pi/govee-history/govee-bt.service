@@ -1,0 +1,12 @@
+[Unit]
+Description=Unblock onboard Bluetooth for the Govee gateway
+After=bluetooth.service
+Before=govee-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh /opt/govee-history/unblock-bt.sh
+
+[Install]
+WantedBy=multi-user.target
