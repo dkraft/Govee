@@ -142,11 +142,12 @@ def render_index(history: History, now_ms: int | None = None) -> str:
         temp = device.get("temp_c")
         humidity = device.get("humidity_pct")
         battery = device.get("battery_pct")
+        shown = None if temp is None or temp == "" else _fahrenheit(float(temp))
         rows.append(
             "<tr>"
             f"<td>{_esc(device.get('name') or device.get('address'))}</td>"
             f"<td>{_esc(device.get('address'))}</td>"
-            f"<td>{_num(temp)}</td>"
+            f"<td>{_num(shown)}</td>"
             f"<td>{_num(humidity)}</td>"
             f"<td>{_num(battery, 0)}</td>"
             f"<td>{_esc(_age(int(device.get('seen_at') or 0), now))}</td>"
@@ -175,7 +176,7 @@ th {{ color: #8B937E; font-weight: normal; }}
 <h1>Govee history</h1>
 <p>{_esc(VERSION)} · gateway {gateway} · {health.get("bound", 0)} bound · {len(devices)} sensors</p>
 <table>
-<thead><tr><th>Name</th><th>Address</th><th>°C</th><th>Humidity</th><th>Battery</th><th>Age</th><th>Source</th></tr></thead>
+<thead><tr><th>Name</th><th>Address</th><th>°F</th><th>Humidity</th><th>Battery</th><th>Age</th><th>Source</th></tr></thead>
 <tbody>
 {body}
 </tbody>
@@ -194,6 +195,10 @@ def _esc(value: object) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def _fahrenheit(celsius: float) -> float:
+    return celsius * 9.0 / 5.0 + 32.0
 
 
 def _num(value: object, digits: int = 1) -> str:

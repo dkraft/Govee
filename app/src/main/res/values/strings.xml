@@ -21,8 +21,8 @@
     <string name="permission_needed">Bluetooth permission is required to read sensors.</string>
     <string name="export_empty">No history to export yet.</string>
     <string name="export_subject">Govee sensor history</string>
-    <string name="high_hint">High °C</string>
-    <string name="low_hint">Low °C</string>
+    <string name="high_hint">High °F</string>
+    <string name="low_hint">Low °F</string>
     <string name="save">Save</string>
     <string name="clear">Clear</string>
 </resources>

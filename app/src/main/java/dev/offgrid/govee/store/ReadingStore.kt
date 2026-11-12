@@ -180,7 +180,7 @@ class ReadingStore private constructor(context: Context) :
 
     fun csv(): String {
         val builder = StringBuilder()
-        builder.append("seen_at,address,name,model,label,temp_c,humidity_pct,battery_pct,co2_ppm,pm25,extra,rssi\n")
+        builder.append("seen_at,address,name,model,label,temp_f,humidity_pct,battery_pct,co2_ppm,pm25,extra,rssi\n")
         readableDatabase.query(
             "readings",
             arrayOf(
@@ -201,7 +201,7 @@ class ReadingStore private constructor(context: Context) :
                     cursor.getString(2).orEmpty(),
                     cursor.getString(3).orEmpty(),
                     cursor.getString(4).orEmpty(),
-                    number(cursor, 5),
+                    fahrenheit(cursor, 5),
                     number(cursor, 6),
                     integer(cursor, 7),
                     integer(cursor, 8),
@@ -266,6 +266,9 @@ class ReadingStore private constructor(context: Context) :
 
     private fun number(cursor: android.database.Cursor, index: Int): String =
         if (cursor.isNull(index)) "" else cursor.getDouble(index).toString()
+
+    private fun fahrenheit(cursor: android.database.Cursor, index: Int): String =
+        if (cursor.isNull(index)) "" else String.format(java.util.Locale.US, "%.1f", cursor.getDouble(index) * 9.0 / 5.0 + 32.0)
 
     private fun integer(cursor: android.database.Cursor, index: Int): String =
         if (cursor.isNull(index)) "" else cursor.getLong(index).toString()

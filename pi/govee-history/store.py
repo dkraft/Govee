@@ -36,7 +36,7 @@ RANGES = {
 
 METRICS = ("temp_c", "humidity_pct", "battery_pct", "co2_ppm", "pm25")
 PROBE = re.compile(r"probe (\d+)=(-?\d+(?:\.\d+)?)")
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 
 
 def floor_bucket(timestamp_ms: int, size_ms: int) -> int:

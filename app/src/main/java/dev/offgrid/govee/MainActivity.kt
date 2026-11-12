@@ -184,8 +184,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun editAlarm(address: String, label: String) {
         val existing = ReadingStore.get(this).alarmFor(address, label)
-        val high = field(getString(R.string.high_hint), existing?.highC)
-        val low = field(getString(R.string.low_hint), existing?.lowC)
+        val high = field(getString(R.string.high_hint), existing?.highC?.let(ReadingText::fahrenheit))
+        val low = field(getString(R.string.low_hint), existing?.lowC?.let(ReadingText::fahrenheit))
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val pad = (16 * resources.displayMetrics.density).toInt()
@@ -197,7 +197,12 @@ class MainActivity : AppCompatActivity() {
             .setTitle(label)
             .setView(column)
             .setPositiveButton(R.string.save) { _, _ ->
-                ReadingStore.get(this).setAlarm(address, label, low.number(), high.number())
+                ReadingStore.get(this).setAlarm(
+                    address,
+                    label,
+                    high.number()?.let(ReadingText::celsius),
+                    low.number()?.let(ReadingText::celsius),
+                )
                 adapter.submit(LiveBoard.snapshot().devices)
             }
             .setNeutralButton(R.string.clear) { _, _ ->

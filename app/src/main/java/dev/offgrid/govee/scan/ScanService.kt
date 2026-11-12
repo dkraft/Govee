@@ -247,10 +247,10 @@ class ScanService : Service() {
             return
         }
         val bounds = listOfNotNull(
-            alarm.lowC?.let { "low %.1fC".format(it) },
-            alarm.highC?.let { "high %.1fC".format(it) },
+            alarm.lowC?.let { "low ${ReadingText.temp(it)}" },
+            alarm.highC?.let { "high ${ReadingText.temp(it)}" },
         ).joinToString(" ")
-        val text = String.format(java.util.Locale.US, "%s %.1fC is outside %s", reading.label, value, bounds)
+        val text = "${reading.label} ${ReadingText.temp(value)} is outside $bounds"
         val notification = NotificationCompat.Builder(this, ALARM_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle(name.ifBlank { reading.model })

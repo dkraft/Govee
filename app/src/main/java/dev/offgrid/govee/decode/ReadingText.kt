@@ -14,8 +14,8 @@ object ReadingText {
         if (reading.events.isNotEmpty()) bits += reading.events.joinToString(" ")
         val probes = reading.probes.joinToString("\n") { probe ->
             val alarms = listOfNotNull(
-                probe.highAlarmC?.let { "high ${one(it)}C" },
-                probe.lowAlarmC?.let { "low ${one(it)}C" },
+                probe.highAlarmC?.let { "high ${temp(it)}" },
+                probe.lowAlarmC?.let { "low ${temp(it)}" },
             )
             val tail = if (alarms.isEmpty()) "" else "  " + alarms.joinToString(" ")
             "probe ${probe.id}  ${temp(probe.temperatureC)}$tail"
@@ -47,7 +47,11 @@ object ReadingText {
         }
     }
 
-    fun temp(celsius: Double): String = "${one(celsius)}C  ${one(celsius * 9.0 / 5.0 + 32.0)}F"
+    fun fahrenheit(celsius: Double): Double = celsius * 9.0 / 5.0 + 32.0
+
+    fun celsius(fahrenheit: Double): Double = (fahrenheit - 32.0) * 5.0 / 9.0
+
+    fun temp(celsius: Double): String = "${one(fahrenheit(celsius))}F"
 
     private fun one(value: Double): String = String.format(java.util.Locale.US, "%.1f", value)
 }

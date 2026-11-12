@@ -199,7 +199,8 @@ class HttpTest(unittest.TestCase):
             page = response.read().decode()
             self.assertIn("text/html", response.headers.get("Content-Type", ""))
         self.assertIn("Govee_H5075_ABCD", page)
-        self.assertIn("21.5", page)
+        self.assertIn("70.7", page)
+        self.assertIn("°F", page)
 
     def test_post_and_series_round_trip(self):
         body = json.dumps({"readings": [reading(NOW, 21.5)]}).encode()

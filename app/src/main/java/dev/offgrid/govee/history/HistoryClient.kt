@@ -147,11 +147,11 @@ class HistoryClient {
         val METRICS = listOf("temp_c", "humidity_pct", "co2_ppm", "pm25", "probe_1", "probe_2", "probe_3", "probe_4")
 
         fun metricLabel(metric: String): String = when (metric) {
-            "temp_c" -> "Temperature °C"
+            "temp_c" -> "Temperature °F"
             "humidity_pct" -> "Humidity %"
             "co2_ppm" -> "CO2 ppm"
             "pm25" -> "PM2.5"
-            else -> if (metric.startsWith("probe_")) "Probe ${metric.removePrefix("probe_")} °C" else metric
+            else -> if (metric.startsWith("probe_")) "Probe ${metric.removePrefix("probe_")} °F" else metric
         }
 
         fun token(context: Context): String =

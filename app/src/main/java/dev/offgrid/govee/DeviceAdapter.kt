@@ -48,8 +48,8 @@ class DeviceAdapter(
             val alarmLines = device.readings.mapNotNull { reading ->
                 val alarm = alarmFor(device.address, reading.label) ?: return@mapNotNull null
                 val parts = listOfNotNull(
-                    alarm.lowC?.let { "low %.1fC".format(it) },
-                    alarm.highC?.let { "high %.1fC".format(it) },
+                    alarm.lowC?.let { "low ${ReadingText.temp(it)}" },
+                    alarm.highC?.let { "high ${ReadingText.temp(it)}" },
                 )
                 if (parts.isEmpty()) null else "Local alarm  ${reading.label}  ${parts.joinToString("  ")}"
             }

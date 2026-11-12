@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import dev.offgrid.govee.R
 import dev.offgrid.govee.databinding.ActivityHistoryBinding
+import dev.offgrid.govee.decode.ReadingText
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -103,7 +104,8 @@ class HistoryActivity : AppCompatActivity() {
         }
         binding.status.text = ""
         val height = (180 * resources.displayMetrics.density).toInt()
-        series.forEach { (metric, points) ->
+        series.forEach { (metric, raw) ->
+            val points = display(metric, raw)
             val caption = TextView(this).apply {
                 val last = points.last()
                 text = String.format(
@@ -122,6 +124,17 @@ class HistoryActivity : AppCompatActivity() {
             }
             binding.charts.addView(caption)
             binding.charts.addView(chart)
+        }
+    }
+
+    private fun display(metric: String, points: List<Point>): List<Point> {
+        if (metric != "temp_c" && !metric.startsWith("probe_")) return points
+        return points.map { point ->
+            point.copy(
+                min = ReadingText.fahrenheit(point.min),
+                max = ReadingText.fahrenheit(point.max),
+                avg = ReadingText.fahrenheit(point.avg),
+            )
         }
     }
 

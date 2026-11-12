@@ -89,14 +89,14 @@ class GoveeDecoderTest {
     }
 
     @Test
-    fun readingTextIncludesBothScales() {
+    fun readingTextUsesFahrenheit() {
         val reading = GoveeDecoder.decode(
             "Govee_H5075_ABCD",
             0xEC88,
             bytes(0x00, 0x03, 0x49, 0x9A, 0x50, 0x00),
         ).single()
         val text = ReadingText.block(reading)
-        assertTrue(text.contains("21.5C"))
+        assertFalse(text.contains("21.5C"))
         assertTrue(text.contains("70.7F"))
         assertTrue(text.contains("45.0%"))
     }
