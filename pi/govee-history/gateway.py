@@ -9,16 +9,27 @@ has a layout we can name.
 from __future__ import annotations
 
 import argparse
+import struct
 import time
 from dataclasses import dataclass
 
 from decode import decode
 from store import History
 
-SERVICE = "00010203-0405-0607-0809-0a0b0c0d1910"
-WRITE_UUID = "00010203-0405-0607-0809-0a0b0c0d2b11"
-NOTIFY_UUID = "00010203-0405-0607-0809-0a0b0c0d2b10"
+# The light layout. This H5151 does not publish it.
+LIGHT_SERVICE = "00010203-0405-0607-0809-0a0b0c0d1910"
+LIGHT_WRITE = "00010203-0405-0607-0809-0a0b0c0d2b11"
+LIGHT_NOTIFY = "00010203-0405-0607-0809-0a0b0c0d2b10"
+# ASCII "INTELLI_ROCKS_HW". The live gateway's write and notify characteristics.
+SENSOR_SERVICE = "494e5445-4c4c-495f-524f-434b535f4857"
+SENSOR_WRITE = "494e5445-4c4c-495f-524f-434b535f2012"
+SENSOR_NOTIFY = "494e5445-4c4c-495f-524f-434b535f2011"
 STATUS_COMMAND = 0xAA
+# 1.25 ms units. 80/160 is 100/200 ms, which this Pi's controller can keep
+# while Wi-Fi is up. The gateway's own preferred 10 ms is what it asks for.
+CONN_MIN = 80
+CONN_MAX = 160
+CONN_TIMEOUT = 400
 CONNECT_SECONDS = 50
 SCAN_SECONDS = 8
 # The Pi 3 shares one radio with Wi-Fi. A failed H5151 connect returns in
@@ -49,6 +60,32 @@ def checksum_ok(data: bytes | bytearray) -> bool:
 
 def status_query() -> bytes:
     return frame(STATUS_COMMAND)
+
+
+def gatt_targets(uuids: set[str]) -> tuple[str | None, str | None, tuple[str, ...]]:
+    """Pick the service this gateway published.
+
+    The H5151 in the house publishes the thermometer service. The light
+    service is only used when that is what a gateway actually has.
+    """
+
+    found = {item.lower() for item in uuids}
+    if SENSOR_SERVICE in found and SENSOR_WRITE in found and SENSOR_NOTIFY in found:
+        return SENSOR_SERVICE, SENSOR_WRITE, (SENSOR_NOTIFY, SENSOR_WRITE)
+    if LIGHT_SERVICE in found and LIGHT_WRITE in found and LIGHT_NOTIFY in found:
+        return LIGHT_SERVICE, LIGHT_WRITE, (LIGHT_NOTIFY,)
+    return None, None, ()
+
+
+def connection_parameter_command(address: str, random_address: bool) -> bytes:
+    parts = [int(part, 16) for part in address.split(":")]
+    if len(parts) != 6 or any(part > 0xFF for part in parts):
+        raise ValueError("address")
+    addr = bytes(reversed(parts))
+    addr_type = 2 if random_address else 1
+    param = addr + struct.pack("<BHHHH", addr_type, CONN_MIN, CONN_MAX, 0, CONN_TIMEOUT)
+    payload = struct.pack("<H", 1) + param
+    return struct.pack("<HHH", 0x0035, 0, len(payload)) + payload
 
 
 def parse_notify(data: bytes) -> list[Reading]:
@@ -100,6 +137,7 @@ def run(history: History, radio) -> None:
         try:
             radio.connect_gateway()
             history.set_status("gateway", "up")
+            history.set_status("gateway_detail", "")
             deadline = time.monotonic() + CONNECT_SECONDS
             while time.monotonic() < deadline:
                 for command in manager.commands_to_send():

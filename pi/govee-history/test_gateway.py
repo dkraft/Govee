@@ -2,7 +2,19 @@
 
 import unittest
 
-from gateway import Heard, Manager, status_query
+from gateway import (
+    Heard,
+    LIGHT_NOTIFY,
+    LIGHT_SERVICE,
+    LIGHT_WRITE,
+    Manager,
+    SENSOR_NOTIFY,
+    SENSOR_SERVICE,
+    SENSOR_WRITE,
+    connection_parameter_command,
+    gatt_targets,
+    status_query,
+)
 from store import History
 
 
@@ -47,6 +59,24 @@ class GatewayPolicyTest(unittest.TestCase):
         self.manager.apply_notify(bytes(20), 1_700_000_000_000)
         self.assertEqual(self.history.bound(), [])
         self.assertIn("last_notify", self.history.status_map())
+
+    def test_the_live_gateway_uses_its_thermometer_service(self):
+        service, write, notify = gatt_targets({SENSOR_SERVICE, SENSOR_WRITE, SENSOR_NOTIFY, "00001800-0000-1000-8000-00805f9b34fb"})
+        self.assertEqual(service, SENSOR_SERVICE)
+        self.assertEqual(write, SENSOR_WRITE)
+        self.assertEqual(notify, (SENSOR_NOTIFY, SENSOR_WRITE))
+
+    def test_a_light_service_is_still_recognized(self):
+        service, write, notify = gatt_targets({LIGHT_SERVICE, LIGHT_WRITE, LIGHT_NOTIFY})
+        self.assertEqual((service, write, notify), (LIGHT_SERVICE, LIGHT_WRITE, (LIGHT_NOTIFY,)))
+
+    def test_connection_parameters_ask_for_a_slow_interval(self):
+        packet = connection_parameter_command("C8:6B:84:C6:20:36", True)
+        self.assertEqual(packet.hex(), "35000000110001003620c6846bc8025000a00000009001")
+
+    def test_a_partial_thermometer_service_is_not_used(self):
+        service, write, notify = gatt_targets({SENSOR_SERVICE, SENSOR_NOTIFY})
+        self.assertEqual((service, write, notify), (None, None, ()))
 
     def test_an_already_bound_sensor_is_not_rediscovered(self):
         self.history.bind("AA:BB:CC:DD:EE:01", "H5075", "kitchen", 1)
