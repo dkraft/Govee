@@ -6,7 +6,9 @@ The Pi manages the H5151. A sensor bound to that gateway is the gateway's sensor
 
 The Pi sends only the existing status query (`0x33`, command `0xAA`). It does not send power, color, reset, or Wi-Fi provisioning frames. A bind command is not sent until a captured notify from this gateway names a sub-device. Until then the bound set stays empty, the phone uploads every sensor it decodes, and `/health` says the gateway is not supplying readings.
 
-Version 0.2.3. Temperatures on the phone and on the Pi page are Fahrenheit. The stored samples stay Celsius. Long-press a row to name that sensor. The name is saved on the Pi and shown instead of the advertised name. The edit screen still shows the advertised name, address, and readings.
+Version 0.2.4. Temperatures on the phone and on the Pi page are Fahrenheit. The stored samples stay Celsius. The device list is a grid of tiles. Hold the grip to drag a tile. Wide makes a tile span the row. Long-press a tile to name that sensor. The name is saved on the Pi and shown instead of the advertised name. The edit screen still shows the advertised name, address, and readings.
+
+A tile with both temperature and humidity shows air VPD in kPa: saturation vapor pressure from the Magnus-Tetens equation, times (1 − relative humidity). The same pair of history series draws a VPD chart. Leaf temperature is not estimated.
 
 ## What you can read
 
@@ -32,22 +34,22 @@ The gateway process is the only Bluetooth connection to the H5151. It holds the 
 
 The onboard adapter `hci0` is present and nothing else uses it. It boots soft-blocked because `/etc/modprobe.d/rfkill_default.conf` sets `default_state=0`. `govee-bt.service` clears that block and powers the adapter. Boot config is unchanged.
 
-The H5151 `Govee_H5151_2036` (`C8:6B:84:C6:20:36`) is in range. The Pi 3 controller brings the link up and then drops it before GATT (`le-connection-abort-by-local`), so the status query is not sent and the bound set stays empty. A failed attempt waits 60 seconds before the next one, so the shared Wi-Fi radio is not hammered. Three H5100 sensors were heard and stored as candidates, not bound. The phone uploads those.
+The H5151 `Govee_H5151_2036` (`C8:6B:84:C6:20:36`) is in range. The gateway process asks the controller for a 100–200 ms connection interval and subscribes to the thermometer service when the gateway publishes it. The light service is used only when that is the service present. A failed attempt waits 60 seconds before the next one, so the shared Wi-Fi radio is not hammered. Nothing is marked bound until a notify layout is known. The phone uploads the sensors it hears.
 
 ## Gateway
 
-The phone no longer connects to the H5151. `GatewayLink` remains the frame reference the Pi port copies: service `00010203-0405-0607-0809-0a0b0c0d1910`, one 20-byte status frame, XOR checksum.
+The phone no longer connects to the H5151. The Pi sends the status query on the service the gateway published. The thermometer service is `494e5445-4c4c-495f-524f-434b535f4857`. The light service `00010203-0405-0607-0809-0a0b0c0d1910` is the fallback. One 20-byte status frame, XOR checksum.
 
 The H5151 that was in range while this was written advertised manufacturer id `0x8801` with a 4-byte payload and did not carry a temperature. Expect the same. If the control service is absent, the Pi reports that and the phone keeps uploading what it hears.
 
 ## Sideload
 
-The sideload build is the 0.2.3 release APK. It is signed with the debug key so it installs on a phone you control. It is not a Play Store upload key. Play Protect blocks a browser install of that debug signature. Install it with adb.
+The release APK is debug-signed so it installs on a phone you control. It is not a Play Store upload key. Play Protect blocks a browser install of that debug signature. Install it with adb.
 
-https://github.com/dkraft/Govee/releases/download/v0.2.3/govee-offgrid-0.2.3.apk
+https://github.com/dkraft/Govee/releases/download/v0.2.4/govee-offgrid-0.2.4.apk
 
 ```
-adb install -r govee-offgrid-0.2.3.apk
+adb install -r govee-offgrid-0.2.4.apk
 ```
 
 On first launch the app asks for Bluetooth scan and connect, and for the history-server token. On Android 12 and older it asks for fine location instead, because that is how those versions gate BLE scans. Notifications are used for the ongoing scan and for alarms. Grant them if you want alarms while the screen is off. The app has an Internet permission so it can reach `10.0.0.69`. It does not call any other host.

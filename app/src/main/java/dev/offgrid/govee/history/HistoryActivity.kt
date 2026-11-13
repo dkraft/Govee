@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import dev.offgrid.govee.R
 import dev.offgrid.govee.databinding.ActivityHistoryBinding
 import dev.offgrid.govee.decode.ReadingText
+import dev.offgrid.govee.decode.Vpd
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -104,16 +105,19 @@ class HistoryActivity : AppCompatActivity() {
         }
         binding.status.text = ""
         val height = (180 * resources.displayMetrics.density).toInt()
-        series.forEach { (metric, raw) ->
+        val shown = series.toMutableList()
+        vpdSeries(series)?.let { points ->
+            val afterHumidity = shown.indexOfFirst { it.first == "humidity_pct" }
+            val at = if (afterHumidity >= 0) afterHumidity + 1 else shown.size
+            shown.add(at, "vpd_kpa" to points)
+        }
+        shown.forEach { (metric, raw) ->
             val points = display(metric, raw)
             val caption = TextView(this).apply {
                 val last = points.last()
-                text = String.format(
-                    Locale.US,
-                    "%s    %.1f",
-                    HistoryClient.metricLabel(metric),
-                    last.avg,
-                )
+                val label = if (metric == "vpd_kpa") "VPD kPa" else HistoryClient.metricLabel(metric)
+                val pattern = if (metric == "vpd_kpa") "%s    %.2f" else "%s    %.1f"
+                text = String.format(Locale.US, pattern, label, last.avg)
                 setTextColor(ContextCompat.getColor(this@HistoryActivity, R.color.text))
                 textSize = 14f
                 setPadding(0, (12 * resources.displayMetrics.density).toInt(), 0, 0)
@@ -125,6 +129,17 @@ class HistoryActivity : AppCompatActivity() {
             binding.charts.addView(caption)
             binding.charts.addView(chart)
         }
+    }
+
+    private fun vpdSeries(series: List<Pair<String, List<Point>>>): List<Point>? {
+        val temp = series.firstOrNull { it.first == "temp_c" }?.second ?: return null
+        val humidity = series.firstOrNull { it.first == "humidity_pct" }?.second ?: return null
+        val byTime = humidity.associateBy { it.t }
+        return temp.mapNotNull { sample ->
+            val wet = byTime[sample.t] ?: return@mapNotNull null
+            val avg = Vpd.kpa(sample.avg, wet.avg)
+            Point(sample.t, avg, avg, avg)
+        }.takeIf { it.isNotEmpty() }
     }
 
     private fun display(metric: String, points: List<Point>): List<Point> {

@@ -18,7 +18,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.DefaultItemAnimator
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.RecyclerView
 import dev.offgrid.govee.board.LiveBoard
 import dev.offgrid.govee.databinding.ActivityMainBinding
 import dev.offgrid.govee.decode.Kind
@@ -53,13 +56,23 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         adapter = DeviceAdapter(
+            initialOrder = loadOrder(),
             alarmFor = { address, label -> ReadingStore.get(this).alarmFor(address, label) },
+            isWide = { address -> address in wideAddresses() },
             onOpen = { device -> openHistory(device) },
             onAlarm = { device -> pickAlarm(device) },
             onRename = { device -> editName(device) },
+            onToggleWide = { address -> toggleWide(address) },
+            onDrag = { holder -> touchHelper.startDrag(holder) },
         )
-        binding.list.layoutManager = LinearLayoutManager(this)
+        val grid = GridLayoutManager(this, 2)
+        grid.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+            override fun getSpanSize(position: Int): Int = if (adapter.isWide(position)) 2 else 1
+        }
+        binding.list.layoutManager = grid
         binding.list.adapter = adapter
+        (binding.list.itemAnimator as? DefaultItemAnimator)?.supportsChangeAnimations = false
+        touchHelper.attachToRecyclerView(binding.list)
         binding.scan.setOnClickListener {
             prefs.edit().putBoolean(WANTED, true).apply()
             ensureScan()
@@ -97,7 +110,70 @@ class MainActivity : AppCompatActivity() {
         }
         binding.empty.visibility = if (state.devices.isEmpty()) View.VISIBLE else View.GONE
         adapter.submit(state.devices)
+        if (!adapter.dragging) {
+            val arranged = adapter.addresses()
+            if (arranged.isNotEmpty() && arranged != loadOrder()) saveOrder(arranged)
+        }
     }
+
+    private fun toggleWide(address: String) {
+        val next = wideAddresses().toMutableSet()
+        if (!next.add(address)) next.remove(address)
+        prefs.edit().putStringSet(TILE_WIDE, next).apply()
+        spanLookup()?.invalidateSpanIndexCache()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun spanLookup(): GridLayoutManager.SpanSizeLookup? =
+        (binding.list.layoutManager as? GridLayoutManager)?.spanSizeLookup
+
+    private fun loadOrder(): List<String> =
+        prefs.getString(TILE_ORDER, "").orEmpty().lines().filter { it.isNotBlank() }
+
+    private fun saveOrder(addresses: List<String>) {
+        prefs.edit().putString(TILE_ORDER, addresses.joinToString("\n")).apply()
+    }
+
+    private fun wideAddresses(): Set<String> = prefs.getStringSet(TILE_WIDE, emptySet()).orEmpty()
+
+    private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+        ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT,
+        0,
+    ) {
+        override fun onMove(
+            recyclerView: RecyclerView,
+            viewHolder: RecyclerView.ViewHolder,
+            target: RecyclerView.ViewHolder,
+        ): Boolean {
+            val from = viewHolder.bindingAdapterPosition
+            val to = target.bindingAdapterPosition
+            if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
+            adapter.move(from, to)
+            spanLookup()?.invalidateSpanIndexCache()
+            return true
+        }
+
+        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
+
+        override fun isLongPressDragEnabled(): Boolean = false
+
+        override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+            super.onSelectedChanged(viewHolder, actionState)
+            if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                adapter.dragging = true
+                viewHolder?.itemView?.translationZ = 8f * resources.displayMetrics.density
+            }
+        }
+
+        override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+            super.clearView(recyclerView, viewHolder)
+            viewHolder.itemView.translationZ = 0f
+            adapter.dragging = false
+            adapter.flush()
+            saveOrder(adapter.addresses())
+            spanLookup()?.invalidateSpanIndexCache()
+        }
+    })
 
     private fun ensureScan() {
         if (scanPermissions().all { permitted(it) }) {
@@ -336,5 +412,7 @@ class MainActivity : AppCompatActivity() {
         private const val PREFS = "govee"
         private const val WANTED = "scanning"
         private const val TOKEN_ASKED = "token_asked"
+        private const val TILE_ORDER = "tile_order"
+        private const val TILE_WIDE = "tile_wide"
     }
 }

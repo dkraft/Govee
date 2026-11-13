@@ -5,6 +5,11 @@ object ReadingText {
         val bits = mutableListOf<String>()
         reading.temperatureC?.let { bits += temp(it) }
         reading.humidityPct?.let { bits += "${one(it)}%" }
+        val celsius = reading.temperatureC
+        val humidity = reading.humidityPct
+        if (celsius != null && humidity != null) {
+            bits += String.format(java.util.Locale.US, "VPD %.2f kPa", Vpd.kpa(celsius, humidity))
+        }
         reading.batteryPct?.let { bits += "bat $it%" }
         reading.co2Ppm?.let { bits += "$it ppm CO2" }
         reading.pm25?.let { bits += "PM2.5 $it" }

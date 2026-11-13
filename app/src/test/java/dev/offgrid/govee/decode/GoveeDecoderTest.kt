@@ -1,5 +1,6 @@
 package dev.offgrid.govee.decode
 
+import dev.offgrid.govee.TileOrder
 import dev.offgrid.govee.gateway.GatewayFrames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -99,6 +100,24 @@ class GoveeDecoderTest {
         assertFalse(text.contains("21.5C"))
         assertTrue(text.contains("70.7F"))
         assertTrue(text.contains("45.0%"))
+        assertTrue(text.contains("VPD 1.41 kPa"))
+    }
+
+    @Test
+    fun airVpdUsesMagnusTetens() {
+        assertEquals(1.4104, Vpd.kpa(21.5, 45.0), 0.0005)
+        assertEquals(1.5839, Vpd.kpa(25.0, 50.0), 0.0005)
+        assertEquals(0.0, Vpd.kpa(21.5, 100.0), 0.0001)
+        assertEquals(0.6108, Vpd.kpa(0.0, 0.0), 0.0001)
+    }
+
+    @Test
+    fun tileOrderKeepsADragAndAppendsNewSensors() {
+        assertEquals(
+            listOf("b", "a", "c"),
+            TileOrder.arrange(listOf("a", "b", "c"), listOf("b", "a", "gone")),
+        )
+        assertEquals(listOf("a", "b"), TileOrder.arrange(listOf("a", "b"), emptyList()))
     }
 
     private fun bytes(vararg values: Int): ByteArray = ByteArray(values.size) { values[it].toByte() }

@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Govee Off-Grid</string>
+    <string name="devices_title">Devices</string>
     <string name="tagline">Local sensors. History stays on the LAN.</string>
+    <string name="drag_tile">Drag to rearrange</string>
+    <string name="tile_wide">Wide</string>
+    <string name="tile_half">Half</string>
+    <string name="offline">Offline</string>
     <string name="scan">Scan</string>
     <string name="stop">Stop</string>
     <string name="export_csv">Export CSV</string>
