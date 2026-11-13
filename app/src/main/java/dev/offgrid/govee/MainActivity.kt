@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: DeviceAdapter
     private var unsubscribe: (() -> Unit)? = null
+    private var scanning = false
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
 
     private val permissionLauncher = registerForActivityResult(
@@ -74,15 +76,28 @@ class MainActivity : AppCompatActivity() {
         (binding.list.itemAnimator as? DefaultItemAnimator)?.supportsChangeAnimations = false
         touchHelper.attachToRecyclerView(binding.list)
         binding.scan.setOnClickListener {
-            prefs.edit().putBoolean(WANTED, true).apply()
-            ensureScan()
+            if (scanning) {
+                prefs.edit().putBoolean(WANTED, false).apply()
+                send(ScanService.ACTION_STOP, null)
+            } else {
+                prefs.edit().putBoolean(WANTED, true).apply()
+                ensureScan()
+            }
         }
-        binding.stop.setOnClickListener {
-            prefs.edit().putBoolean(WANTED, false).apply()
-            send(ScanService.ACTION_STOP, null)
+        binding.settings.setOnClickListener { anchor ->
+            PopupMenu(this, anchor).apply {
+                menu.add(0, MENU_SERVER, 0, R.string.server)
+                menu.add(0, MENU_EXPORT, 1, R.string.export_csv)
+                setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        MENU_SERVER -> editToken()
+                        MENU_EXPORT -> exportCsv()
+                    }
+                    true
+                }
+                show()
+            }
         }
-        binding.exportCsv.setOnClickListener { exportCsv() }
-        binding.server.setOnClickListener { editToken() }
         if (!prefs.getBoolean(TOKEN_ASKED, false)) {
             prefs.edit().putBoolean(TOKEN_ASKED, true).apply()
             editToken()
@@ -108,6 +123,8 @@ class MainActivity : AppCompatActivity() {
         } else {
             "${state.status}   ·   $count\n${state.history}"
         }
+        scanning = state.scanning
+        binding.scan.text = getString(if (state.scanning) R.string.stop else R.string.scan)
         binding.empty.visibility = if (state.devices.isEmpty()) View.VISIBLE else View.GONE
         adapter.submit(state.devices)
         if (!adapter.dragging) {
@@ -414,5 +431,7 @@ class MainActivity : AppCompatActivity() {
         private const val TOKEN_ASKED = "token_asked"
         private const val TILE_ORDER = "tile_order"
         private const val TILE_WIDE = "tile_wide"
+        private const val MENU_SERVER = 1
+        private const val MENU_EXPORT = 2
     }
 }

@@ -2,7 +2,7 @@
 
 This file is for the next person or agent changing the app or the Pi. The user-facing description is `README.md`. Do not put the Pi password or the history token in the repo, in this file, or in memory notes.
 
-Version is `0.2.0` (`versionCode` 2). Package `dev.offgrid.govee`. minSdk 26, compile/target 34. Kotlin, view binding. No chart library. Do not add Android dependencies.
+Version is `0.2.5` (`versionCode` 7). Package `dev.offgrid.govee`. minSdk 26, compile/target 34. Kotlin, view binding. No chart library. Do not add Android dependencies.
 
 ## What the system is
 
@@ -67,7 +67,9 @@ Redeploy by copying the changed files to `/opt/govee-history/` and restarting on
 
 Name `Govee_H5151_2036`, address `C8:6B:84:C6:20:36`, random static, RSSI about −34 to −38 dBm. Flags `0x06` (general discoverable, BR/EDR not supported). Manufacturer `34817` (`0x8801`), payload `ec 00 01 01`. The advertisement is connectable undirected.
 
-A connect does complete. `btmon` then shows `LE Read Remote Used Features` failing with status `0x3e` (Connection Failed to be Established) about 300 ms later, and BlueZ reports `org.bluez.Error.Failed: le-connection-abort-by-local`. Supervision timeout on the create-connection command was the kernel default, 420 ms (`0x002a`), interval about 49 ms. GATT never appears, so the status query is not sent and `/health` stays `gateway=down` with that detail. The bound table stays empty.
+A connect does complete. On 2026-11-12, `btmon` showed `LE Read Remote Used Features` failing with status `0x3e` (Connection Failed to be Established) about 300 ms later, and BlueZ reported `org.bluez.Error.Failed: le-connection-abort-by-local`. Supervision timeout on the create-connection command was the kernel default, 420 ms (`0x002a`), interval about 49 ms. GATT never appeared that day, so the status query was not sent.
+
+Checked again 2026-11-13 17:16. The running unit is the same PID from 2026-11-12 10:08, and `/opt/govee-history/gateway.py` matches the repo. `/health` was `up` for a moment, then stayed `down` with `gateway_detail` `org.bluez.Error.Failed: Not connected`. While it was up, `C8:6B:84:C6:20:36` was `Connected` and `ServicesResolved`. The published service is the thermometer service `494e5445-4c4c-495f-524f-434b535f4857` with characteristics `…2011` and `…2012` (both write and notify). There is no `…2013` and no light service `00010203-…1910`. Notify flags were false after the drop, and BlueZ then removed the device object. `bound` is still 0. The journal has no traceback: `run()` stores that BlueZ error from the uncaught status-query `WriteValue`. The link comes up, then the write finds it already gone.
 
 Writing `MinConnectionInterval`, `MaxConnectionInterval`, and `ConnectionSupervisionTimeout` into `/etc/bluetooth/main.conf` loaded those numbers into `/sys/kernel/debug/bluetooth/hci0/`, and the HCI create-connection command still used `0x0018` / `0x0028` / `0x002a`. That edit was reverted. Do not treat a main.conf change as a fix until `btmon` shows different create-connection parameters and the link survives long enough for the control service.
 
